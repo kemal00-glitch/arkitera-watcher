@@ -17,35 +17,32 @@ import sys
 from email.mime.text import MIMEText
 from pathlib import Path
 
-import requests
 from bs4 import BeautifulSoup
+from playwright.sync_api import sync_playwright
 
 URL = "https://www.arkitera.com/kariyer/"
 STATE_FILE = Path(__file__).parent / "seen_jobs.json"
-HEADERS = {
-    "User-Agent": (
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-        "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
-    ),
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
-    "Accept-Language": "tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7",
-    "Accept-Encoding": "gzip, deflate, br",
-    "Connection": "keep-alive",
-    "Upgrade-Insecure-Requests": "1",
-    "Sec-Fetch-Dest": "document",
-    "Sec-Fetch-Mode": "navigate",
-    "Sec-Fetch-Site": "none",
-    "Sec-Fetch-User": "?1",
-    "Referer": "https://www.google.com/",
-}
+USER_AGENT = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+)
 
 
 def fetch_jobs():
-    """Return a list of {title, url} dicts for jobs currently listed on page 1."""
-    session = requests.Session()
-    resp = session.get(URL, headers=HEADERS, timeout=30)
-    resp.raise_for_status()
-    soup = BeautifulSoup(resp.text, "html.parser")
+    """Return a list of {title, url} dicts for jobs currently listed on page 1.
+
+    Uses a real (headless) browser rather than a plain HTTP request, because
+    the site's bot protection blocks simple scripted requests.
+    """
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        context = browser.new_context(user_agent=USER_AGENT, locale="tr-TR")
+        page = context.new_page()
+        page.goto(URL, wait_until="networkidle", timeout=60000)
+        html = page.content()
+        browser.close()
+
+    soup = BeautifulSoup(html, "html.parser")
 
     jobs = {}
     prefix = "https://www.arkitera.com/kariyer/"
@@ -104,7 +101,7 @@ def send_email(new_jobs):
 def main():
     try:
         current_jobs = fetch_jobs()
-    except requests.RequestException as e:
+    except Exception as e:
         print(f"Failed to fetch page: {e}", file=sys.stderr)
         sys.exit(1)
 
