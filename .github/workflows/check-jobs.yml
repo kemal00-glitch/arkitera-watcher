@@ -1,0 +1,40 @@
+name: Arkitera Job Watcher
+
+on:
+  schedule:
+    # Runs at the top of every hour. GitHub may delay this by a few minutes
+    # during high load -- that's normal. Adjust the cron expression if you
+    # want a different interval, e.g. '*/30 * * * *' for every 30 minutes.
+    - cron: '0 * * * *'
+  workflow_dispatch: {}  # lets you trigger a run manually from the Actions tab
+
+permissions:
+  contents: write  # needed so the workflow can commit the updated state file
+
+jobs:
+  check-jobs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Check for new jobs
+        env:
+          MAIL_USERNAME: ${{ secrets.MAIL_USERNAME }}
+          MAIL_PASSWORD: ${{ secrets.MAIL_PASSWORD }}
+          MAIL_TO: ${{ secrets.MAIL_TO }}
+        run: python scraper.py
+
+      - name: Save updated state back to the repo
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add seen_jobs.json
+          git diff --staged --quiet || git commit -m "Update seen jobs [skip ci]"
+          git push
