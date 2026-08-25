@@ -38,7 +38,8 @@ def fetch_jobs():
         browser = p.chromium.launch(headless=True)
         context = browser.new_context(user_agent=USER_AGENT, locale="tr-TR")
         page = context.new_page()
-        page.goto(URL, wait_until="networkidle", timeout=60000)
+        page.goto(URL, wait_until="domcontentloaded", timeout=30000)
+        page.wait_for_timeout(2000)  # brief pause for any late-rendering content
         html = page.content()
         browser.close()
 
