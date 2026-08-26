@@ -19,6 +19,7 @@ from pathlib import Path
 
 from bs4 import BeautifulSoup
 from playwright.sync_api import sync_playwright
+import requests
 
 URL = "https://www.arkitera.com/kariyer/"
 STATE_FILE = Path(__file__).parent / "seen_jobs.json"
@@ -99,6 +100,32 @@ def send_email(new_jobs):
         server.sendmail(username, [to_addr], msg.as_string())
 
 
+def send_push_notification(new_jobs):
+    """Send an instant phone push via ntfy.sh -- skipped silently if not configured."""
+    topic = os.environ.get("NTFY_TOPIC")
+    if not topic:
+        return
+
+    titles = "\n".join(j["title"] for j in new_jobs[:5])
+    if len(new_jobs) > 5:
+        titles += f"\n...and {len(new_jobs) - 5} more"
+
+    try:
+        requests.post(
+            f"https://ntfy.sh/{topic}",
+            data=titles.encode("utf-8"),
+            headers={
+                "Title": f"{len(new_jobs)} new Arkitera job(s)".encode("utf-8"),
+                "Priority": "urgent",
+                "Tags": "briefcase",
+            },
+            timeout=15,
+        )
+    except requests.RequestException as e:
+        # Don't fail the whole run over this -- the email already went out.
+        print(f"Push notification failed (email should still have sent): {e}", file=sys.stderr)
+
+
 def main():
     try:
         current_jobs = fetch_jobs()
@@ -128,8 +155,9 @@ def main():
 
     if new_urls:
         new_jobs = [j for j in current_jobs if j["url"] in new_urls]
-        print(f"Found {len(new_jobs)} new job(s). Sending email...")
+        print(f"Found {len(new_jobs)} new job(s). Sending email and push notification...")
         send_email(new_jobs)
+        send_push_notification(new_jobs)
     else:
         print("No new jobs.")
 
