@@ -80,7 +80,11 @@ def save_seen(urls):
 def send_email(new_jobs):
     username = os.environ["MAIL_USERNAME"]
     password = os.environ["MAIL_PASSWORD"]
-    to_addr = os.environ.get("MAIL_TO", username)
+    to_addrs = [
+        addr.strip()
+        for addr in os.environ.get("MAIL_TO", username).split(",")
+        if addr.strip()
+    ]
 
     lines = [f"{j['title']}\n{j['url']}\n" for j in new_jobs]
     body = (
@@ -92,12 +96,12 @@ def send_email(new_jobs):
     msg = MIMEText(body, "plain", "utf-8")
     msg["Subject"] = f"Arkitera Kariyer: {len(new_jobs)} new job(s)"
     msg["From"] = username
-    msg["To"] = to_addr
+    msg["To"] = ", ".join(to_addrs)
 
     with smtplib.SMTP("smtp.gmail.com", 587) as server:
         server.starttls()
         server.login(username, password)
-        server.sendmail(username, [to_addr], msg.as_string())
+        server.sendmail(username, to_addrs, msg.as_string())
 
 
 def send_push_notification(new_jobs):
